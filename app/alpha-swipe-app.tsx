@@ -1198,13 +1198,13 @@ export function AlphaSwipeApp() {
                 </div>
                 {walletConnection ? (
                   <div className="wallet-ready-state">
-                    <span><i /> Connected to Injective Mainnet</span>
+                    <span><i /> Phantom connected · Ethereum Mainnet</span>
                     <div>
-                      <small>Injective address</small>
+                      <small>Injective trading address</small>
                       <strong>{walletConnection.injectiveAddress}</strong>
                     </div>
                     <div>
-                      <small>Phantom EVM address</small>
+                      <small>Ethereum signer address</small>
                       <strong>{walletConnection.ethereumAddress}</strong>
                     </div>
                     <button

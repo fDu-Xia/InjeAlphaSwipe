@@ -106,7 +106,12 @@ test("starter preview is removed and product assets are wired", async () => {
   assert.match(injectiveClient, /new modules\.BaseWalletStrategy/);
   assert.match(injectiveClient, /new modules\.EvmWalletStrategy/);
   assert.match(injectiveClient, /Wallet\.Phantom/);
-  assert.match(injectiveClient, /EvmChainId\.MainnetEvm/);
+  assert.match(injectiveClient, /EvmChainId\.Mainnet(?!Evm)/);
+  assert.doesNotMatch(injectiveClient, /EvmChainId\.MainnetEvm/);
+  assert.match(
+    injectiveClient,
+    /addEvmNetwork\(modules\.EvmChainId\.Mainnet\)/,
+  );
   assert.match(injectiveClient, /getInjectiveAddress/);
   assert.match(injectiveClient, /strategy\.getAddresses/);
   assert.match(injectiveClient, /eth_accounts/);

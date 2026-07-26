@@ -54,7 +54,6 @@ const DERIVATIVE_MARKET_ORDER_TYPE = {
   BUY: 1,
   SELL: 2,
 } as const;
-const INJECTIVE_EVM_RPC_URL = "https://sentry.evm-rpc.injective.network/";
 
 let injectiveModulesPromise: Promise<any> | undefined;
 let phantomWalletStrategyPromise: Promise<any> | undefined;
@@ -86,7 +85,7 @@ function normalizeInjectiveOrderError(error: unknown) {
     return "Phantom signature was rejected. No order was submitted.";
   }
   if (/selected network is incorrect|chain switch/i.test(message)) {
-    return "Switch Phantom to Injective EVM Mainnet and try again.";
+    return "Switch Phantom to Ethereum Mainnet and try again.";
   }
   if (/account .* not found/i.test(message)) {
     return "Account not activated or insufficient balance. Fund this Injective address before trading.";
@@ -163,8 +162,8 @@ async function getPhantomWalletStrategy(modules: any) {
       const strategyArgs = {
         chainId: modules.ChainId.Mainnet,
         evmOptions: {
-          evmChainId: modules.EvmChainId.MainnetEvm,
-          rpcUrl: INJECTIVE_EVM_RPC_URL,
+          evmChainId: modules.EvmChainId.Mainnet,
+          rpcUrl: "",
         },
         wallet: modules.Wallet.Phantom,
       };
@@ -210,21 +209,21 @@ async function getAuthorizedPhantomAddresses(
     : [];
 }
 
-async function ensurePhantomInjectiveNetwork(modules: any) {
+async function ensurePhantomEthereumMainnet(modules: any) {
   const strategy = await getPhantomWalletStrategy(modules);
   const currentChainId = Number.parseInt(
     await strategy.getEthereumChainId(),
     16,
   );
-  if (currentChainId === modules.EvmChainId.MainnetEvm) return;
+  if (currentChainId === modules.EvmChainId.Mainnet) return;
 
   const concreteStrategy = strategy.getStrategy();
   if (typeof concreteStrategy.addEvmNetwork !== "function") {
     throw new Error(
-      "Phantom cannot switch to Injective EVM Mainnet. Update the extension and try again.",
+      "Phantom cannot switch to Ethereum Mainnet. Update the extension and try again.",
     );
   }
-  await concreteStrategy.addEvmNetwork(modules.EvmChainId.MainnetEvm);
+  await concreteStrategy.addEvmNetwork(modules.EvmChainId.Mainnet);
 }
 
 async function assertConnectedPhantomAddress(
@@ -245,7 +244,7 @@ async function assertConnectedPhantomAddress(
       "The active Phantom account changed. Reconnect it before trading.",
     );
   }
-  await ensurePhantomInjectiveNetwork(modules);
+  await ensurePhantomEthereumMainnet(modules);
   return connection;
 }
 
@@ -257,7 +256,7 @@ export async function connectPhantomWallet(): Promise<PhantomWalletConnection> {
   if (!activeAddress) {
     throw new Error("Phantom did not return an Ethereum address.");
   }
-  await ensurePhantomInjectiveNetwork(modules);
+  await ensurePhantomEthereumMainnet(modules);
   return toPhantomWalletConnection(modules, activeAddress);
 }
 
@@ -576,7 +575,7 @@ async function broadcastDerivativeOrder(
     walletStrategy,
     network: modules.Network.Mainnet,
     endpoints,
-    evmChainId: modules.EvmChainId.MainnetEvm,
+    evmChainId: modules.EvmChainId.Mainnet,
     simulateTx: true,
     gasBufferCoefficient: 1.1,
   });

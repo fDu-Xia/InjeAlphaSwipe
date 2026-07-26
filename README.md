@@ -15,7 +15,7 @@ discussion.
 - Three-direction pointer, touch, and keyboard controls
 - Discover, Position, and Settings navigation
 - Live Injective Mainnet positions and unrealized PnL
-- Phantom wallet connection with linked Injective address discovery
+- Phantom Ethereum Mainnet connection with linked Injective address discovery
 - Injective Mainnet derivative-market discovery, live orderbook lookup, gas
   simulation, signing, and broadcast
 - Phantom-confirmed EIP-712 signing for entries and position closes
@@ -25,8 +25,9 @@ discussion.
 
 AlphaSwipe never requests or stores a private key or seed phrase. Phantom
 provides the selected public EVM address, which is mapped to its Injective
-address. Every Mainnet entry and close request must be approved in Phantom
-before it can be broadcast.
+address. Phantom stays on standard Ethereum Mainnet for EIP-712 signing; orders
+are still broadcast to Injective Mainnet's native exchange module. Every entry
+and close request must be approved in Phantom before it can be broadcast.
 
 ## Run locally
 
