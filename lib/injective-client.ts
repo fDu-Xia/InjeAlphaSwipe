@@ -5,7 +5,7 @@
 export type OrderSide = "long" | "short";
 
 type PlaceOrderInput = {
-  privateKey: string;
+  injectiveAddress: string;
   marketQuery: string;
   side: OrderSide;
   notional: number;
@@ -23,11 +23,16 @@ type PlaceOrderResult = {
 };
 
 type ClosePositionInput = {
-  privateKey: string;
+  injectiveAddress: string;
   marketId: string;
   subaccountId: string;
   positionSide: OrderSide;
   quantity: string;
+};
+
+export type PhantomWalletConnection = {
+  ethereumAddress: string;
+  injectiveAddress: string;
 };
 
 export type DerivativePosition = {
@@ -49,17 +54,11 @@ const DERIVATIVE_MARKET_ORDER_TYPE = {
   BUY: 1,
   SELL: 2,
 } as const;
+const INJECTIVE_EVM_RPC_URL = "https://sentry.evm-rpc.injective.network/";
 
 let injectiveModulesPromise: Promise<any> | undefined;
+let phantomWalletStrategyPromise: Promise<any> | undefined;
 let marketsCache: any[] | undefined;
-
-function normalizePrivateKey(value: string) {
-  const normalized = value.trim().replace(/^0x/i, "");
-  if (!/^[a-f0-9]{64}$/i.test(normalized)) {
-    throw new Error("Enter a 64-character hexadecimal Injective private key.");
-  }
-  return normalized;
-}
 
 function getDerivativeMarketOrderType(side: OrderSide) {
   return side === "long"
@@ -83,6 +82,12 @@ function getErrorText(error: unknown) {
 
 function normalizeInjectiveOrderError(error: unknown) {
   const message = getErrorText(error);
+  if (/user rejected|user denied|request rejected|cancelled by user/i.test(message)) {
+    return "Phantom signature was rejected. No order was submitted.";
+  }
+  if (/selected network is incorrect|chain switch/i.test(message)) {
+    return "Switch Phantom to Injective EVM Mainnet and try again.";
+  }
   if (/account .* not found/i.test(message)) {
     return "Account not activated or insufficient balance. Fund this Injective address before trading.";
   }
@@ -112,6 +117,11 @@ async function loadInjectiveModules() {
         sdkAccounts,
         sdkUtils,
         baseUtils,
+        tsTypes,
+        walletBase,
+        walletBroadcaster,
+        walletCoreStrategy,
+        walletEvm,
       ] = await Promise.all([
         import("@injectivelabs/networks"),
         import("@injectivelabs/sdk-ts/client/indexer"),
@@ -120,6 +130,11 @@ async function loadInjectiveModules() {
         import("@injectivelabs/sdk-ts/core/accounts"),
         import("@injectivelabs/sdk-ts/utils"),
         import("@injectivelabs/utils"),
+        import("@injectivelabs/ts-types"),
+        import("@injectivelabs/wallet-base"),
+        import("@injectivelabs/wallet-core/broadcaster"),
+        import("@injectivelabs/wallet-core/strategy"),
+        import("@injectivelabs/wallet-evm"),
       ]);
 
       return {
@@ -129,6 +144,11 @@ async function loadInjectiveModules() {
         ...sdkTx,
         ...sdkAccounts,
         ...sdkUtils,
+        ...tsTypes,
+        ...walletBase,
+        ...walletBroadcaster,
+        ...walletCoreStrategy,
+        ...walletEvm,
         BigNumber: baseUtils.BigNumber,
       };
     })();
@@ -137,14 +157,160 @@ async function loadInjectiveModules() {
   return injectiveModulesPromise;
 }
 
-export async function deriveInjectiveAddress(privateKeyValue: string) {
+async function getPhantomWalletStrategy(modules: any) {
+  if (!phantomWalletStrategyPromise) {
+    phantomWalletStrategyPromise = (async () => {
+      const strategyArgs = {
+        chainId: modules.ChainId.Mainnet,
+        evmOptions: {
+          evmChainId: modules.EvmChainId.MainnetEvm,
+          rpcUrl: INJECTIVE_EVM_RPC_URL,
+        },
+        wallet: modules.Wallet.Phantom,
+      };
+      const phantomStrategy = new modules.EvmWalletStrategy({
+        ...strategyArgs,
+        wallet: modules.Wallet.Phantom,
+      });
+      const strategy = new modules.BaseWalletStrategy({
+        ...strategyArgs,
+        strategies: {
+          [modules.Wallet.Phantom]: phantomStrategy,
+        },
+      });
+      await strategy.setWallet(modules.Wallet.Phantom);
+      return strategy;
+    })().catch((error) => {
+      phantomWalletStrategyPromise = undefined;
+      throw error;
+    });
+  }
+
+  return phantomWalletStrategyPromise;
+}
+
+function toPhantomWalletConnection(
+  modules: any,
+  ethereumAddress: string,
+): PhantomWalletConnection {
+  return {
+    ethereumAddress,
+    injectiveAddress: modules.getInjectiveAddress(ethereumAddress),
+  };
+}
+
+async function getAuthorizedPhantomAddresses(
+  modules: any,
+): Promise<string[]> {
+  const strategy = await getPhantomWalletStrategy(modules);
+  const provider = await strategy.getEip1193Provider();
+  const addresses = await provider.request({ method: "eth_accounts" });
+  return Array.isArray(addresses)
+    ? addresses.filter((address): address is string => typeof address === "string")
+    : [];
+}
+
+async function ensurePhantomInjectiveNetwork(modules: any) {
+  const strategy = await getPhantomWalletStrategy(modules);
+  const currentChainId = Number.parseInt(
+    await strategy.getEthereumChainId(),
+    16,
+  );
+  if (currentChainId === modules.EvmChainId.MainnetEvm) return;
+
+  const concreteStrategy = strategy.getStrategy();
+  if (typeof concreteStrategy.addEvmNetwork !== "function") {
+    throw new Error(
+      "Phantom cannot switch to Injective EVM Mainnet. Update the extension and try again.",
+    );
+  }
+  await concreteStrategy.addEvmNetwork(modules.EvmChainId.MainnetEvm);
+}
+
+async function assertConnectedPhantomAddress(
+  modules: any,
+  injectiveAddress: string,
+) {
+  const addresses = await getAuthorizedPhantomAddresses(modules);
+  const activeAddress = addresses[0];
+  if (!activeAddress) {
+    throw new Error("Phantom is disconnected. Connect it again in Settings.");
+  }
+  const connection = toPhantomWalletConnection(modules, activeAddress);
+  if (
+    connection.injectiveAddress.toLowerCase() !==
+    injectiveAddress.toLowerCase()
+  ) {
+    throw new Error(
+      "The active Phantom account changed. Reconnect it before trading.",
+    );
+  }
+  await ensurePhantomInjectiveNetwork(modules);
+  return connection;
+}
+
+export async function connectPhantomWallet(): Promise<PhantomWalletConnection> {
+  const modules = await loadInjectiveModules();
+  const strategy = await getPhantomWalletStrategy(modules);
+  const addresses = await strategy.getAddresses();
+  const activeAddress = addresses[0];
+  if (!activeAddress) {
+    throw new Error("Phantom did not return an Ethereum address.");
+  }
+  await ensurePhantomInjectiveNetwork(modules);
+  return toPhantomWalletConnection(modules, activeAddress);
+}
+
+export async function restorePhantomWallet(): Promise<PhantomWalletConnection | null> {
   const modules = await loadInjectiveModules();
   try {
-    return modules.PrivateKey.fromHex(
-      normalizePrivateKey(privateKeyValue),
-    ).toBech32();
+    const addresses = await getAuthorizedPhantomAddresses(modules);
+    return addresses[0]
+      ? toPhantomWalletConnection(modules, addresses[0])
+      : null;
   } catch {
-    throw new Error("Invalid private key. Unable to derive an Injective address.");
+    return null;
+  }
+}
+
+export async function watchPhantomWallet(
+  onChange: (connection: PhantomWalletConnection | null) => void,
+) {
+  const modules = await loadInjectiveModules();
+  const strategy = await getPhantomWalletStrategy(modules);
+  const provider = await strategy.getEip1193Provider();
+  const handleAccountsChanged = (accounts: unknown) => {
+    const activeAddress =
+      Array.isArray(accounts) && typeof accounts[0] === "string"
+        ? accounts[0]
+        : "";
+    onChange(
+      activeAddress
+        ? toPhantomWalletConnection(modules, activeAddress)
+        : null,
+    );
+  };
+  provider.on?.("accountsChanged", handleAccountsChanged);
+
+  return () => {
+    provider.removeListener?.("accountsChanged", handleAccountsChanged);
+  };
+}
+
+export async function disconnectPhantomWallet() {
+  const modules = await loadInjectiveModules();
+  try {
+    const strategy = await getPhantomWalletStrategy(modules);
+    const provider = await strategy.getEip1193Provider();
+    await provider
+      .request({
+        method: "wallet_revokePermissions",
+        params: [{ eth_accounts: {} }],
+      })
+      .catch(() => undefined);
+    await strategy.disconnect();
+  } finally {
+    phantomWalletStrategyPromise = undefined;
   }
 }
 
@@ -400,20 +566,26 @@ function getEntryOrderSize(
 
 async function broadcastDerivativeOrder(
   modules: any,
-  normalizedPrivateKey: string,
+  injectiveAddress: string,
   endpoints: any,
   msg: any,
 ) {
-  const broadcaster = new modules.MsgBroadcasterWithPk({
-    privateKey: normalizedPrivateKey,
+  await assertConnectedPhantomAddress(modules, injectiveAddress);
+  const walletStrategy = await getPhantomWalletStrategy(modules);
+  const broadcaster = new modules.MsgBroadcaster({
+    walletStrategy,
     network: modules.Network.Mainnet,
     endpoints,
+    evmChainId: modules.EvmChainId.MainnetEvm,
     simulateTx: true,
     gasBufferCoefficient: 1.1,
   });
   let response;
   try {
-    response = await broadcaster.broadcast({ msgs: msg });
+    response = await broadcaster.broadcast({
+      msgs: msg,
+      injectiveAddress,
+    });
   } catch (error) {
     throw new Error(normalizeInjectiveOrderError(error));
   }
@@ -429,9 +601,7 @@ export async function placeDerivativeMarketOrder(
   input: PlaceOrderInput,
 ): Promise<PlaceOrderResult> {
   const modules = await loadInjectiveModules();
-  const normalizedPrivateKey = normalizePrivateKey(input.privateKey);
-  const privateKey = modules.PrivateKey.fromHex(normalizedPrivateKey);
-  const injectiveAddress = privateKey.toBech32();
+  const injectiveAddress = input.injectiveAddress;
   const markets = await fetchMarkets(modules);
   const endpoints = modules.getNetworkEndpoints(modules.Network.Mainnet);
   const derivativesApi = new modules.IndexerGrpcDerivativesApi(
@@ -487,7 +657,7 @@ export async function placeDerivativeMarketOrder(
 
   const response = await broadcastDerivativeOrder(
     modules,
-    normalizedPrivateKey,
+    injectiveAddress,
     endpoints,
     msg,
   );
@@ -506,9 +676,7 @@ export async function closeDerivativePosition(
   input: ClosePositionInput,
 ): Promise<PlaceOrderResult> {
   const modules = await loadInjectiveModules();
-  const normalizedPrivateKey = normalizePrivateKey(input.privateKey);
-  const privateKey = modules.PrivateKey.fromHex(normalizedPrivateKey);
-  const injectiveAddress = privateKey.toBech32();
+  const injectiveAddress = input.injectiveAddress;
   const markets = await fetchMarkets(modules);
   const market = markets.find(
     (candidate: any) => String(candidate.marketId) === input.marketId,
@@ -570,7 +738,7 @@ export async function closeDerivativePosition(
   });
   const response = await broadcastDerivativeOrder(
     modules,
-    normalizedPrivateKey,
+    injectiveAddress,
     endpoints,
     msg,
   );

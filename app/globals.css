@@ -338,7 +338,7 @@ svg {
 
 .mainnet-live i,
 .network-setting i,
-.key-ready-state i {
+.wallet-ready-state i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -2056,59 +2056,14 @@ svg {
   line-height: 1.55;
 }
 
-.private-key-card {
+.wallet-card {
   border-top: 2px solid rgba(92, 71, 209, 0.16);
 }
 
-.private-key-input {
-  margin-top: 14px;
-  display: grid;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 8px;
-  font-weight: 800;
-}
-
-.private-key-input > div {
-  min-height: 43px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  display: grid;
-  grid-template-columns: 1fr 42px;
-  overflow: hidden;
-  background: var(--surface-soft);
-}
-
-.private-key-input input {
-  min-width: 0;
-  padding: 0 11px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-}
-
-.private-key-input button {
-  border: 0;
-  border-left: 1px solid var(--line);
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.private-key-input button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.save-key-button {
+.wallet-connect-button {
   width: 100%;
   min-height: 43px;
-  margin-top: 9px;
+  margin-top: 14px;
   border: 0;
   border-radius: 10px;
   display: flex;
@@ -2122,18 +2077,18 @@ svg {
   cursor: pointer;
 }
 
-.save-key-button:disabled {
+.wallet-connect-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.save-key-button svg {
+.wallet-connect-button svg {
   width: 15px;
   height: 15px;
   color: var(--cyan);
 }
 
-.key-ready-state {
+.wallet-ready-state {
   margin-top: 14px;
   padding: 12px;
   border: 1px solid #d1ece4;
@@ -2143,7 +2098,7 @@ svg {
   background: #f1fbf8;
 }
 
-.key-ready-state span {
+.wallet-ready-state span {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -2152,11 +2107,23 @@ svg {
   font-weight: 850;
 }
 
-.key-ready-state i {
+.wallet-ready-state i {
   background: var(--green);
 }
 
-.key-ready-state strong {
+.wallet-ready-state > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.wallet-ready-state small {
+  color: var(--muted);
+  font-size: 7px;
+  font-weight: 750;
+}
+
+.wallet-ready-state strong {
   overflow: hidden;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 8px;
@@ -2164,7 +2131,7 @@ svg {
   white-space: nowrap;
 }
 
-.key-ready-state button {
+.wallet-ready-state button {
   min-height: 35px;
   border: 1px solid rgba(198, 55, 66, 0.18);
   border-radius: 8px;
@@ -2175,11 +2142,33 @@ svg {
   cursor: pointer;
 }
 
-.key-security-note {
+.wallet-ready-state button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.wallet-security-note {
   margin: 11px 0 0;
   color: #777d89;
   font-size: 7.5px;
   line-height: 1.55;
+}
+
+.phantom-install-link {
+  width: fit-content;
+  margin-top: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #5c47d1;
+  font-size: 8px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.phantom-install-link svg {
+  width: 11px;
+  height: 11px;
 }
 
 .danger-copy {

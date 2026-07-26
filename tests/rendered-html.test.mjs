@@ -102,8 +102,18 @@ test("starter preview is removed and product assets are wired", async () => {
   }
   assert.equal((newsData.match(/earnings:\s*\{/g) ?? []).length, 4);
   assert.match(injectiveClient, /MsgCreateDerivativeMarketOrder/);
-  assert.match(injectiveClient, /MsgBroadcasterWithPk/);
-  assert.match(injectiveClient, /PrivateKey\.fromHex/);
+  assert.match(injectiveClient, /new modules\.MsgBroadcaster/);
+  assert.match(injectiveClient, /new modules\.BaseWalletStrategy/);
+  assert.match(injectiveClient, /new modules\.EvmWalletStrategy/);
+  assert.match(injectiveClient, /Wallet\.Phantom/);
+  assert.match(injectiveClient, /EvmChainId\.MainnetEvm/);
+  assert.match(injectiveClient, /getInjectiveAddress/);
+  assert.match(injectiveClient, /strategy\.getAddresses/);
+  assert.match(injectiveClient, /eth_accounts/);
+  assert.match(injectiveClient, /wallet_revokePermissions/);
+  assert.doesNotMatch(injectiveClient, /MsgBroadcasterWithPk/);
+  assert.doesNotMatch(injectiveClient, /PrivateKey\.fromHex/);
+  assert.doesNotMatch(injectiveClient, /privateKey/);
   assert.match(injectiveClient, /DERIVATIVE_MARKET_ORDER_TYPE/);
   assert.match(injectiveClient, /BUY:\s*1/);
   assert.match(injectiveClient, /SELL:\s*2/);
@@ -119,13 +129,20 @@ test("starter preview is removed and product assets are wired", async () => {
   assert.match(injectiveClient, /Network\.Mainnet/);
   assert.doesNotMatch(injectiveClient, /Network\.Testnet|ChainId\.Testnet/);
   assert.match(injectiveClient, /derivativePriceFromChainPriceToFixed/);
-  assert.doesNotMatch(injectiveClient, /WalletStrategy|Wallet\.Keplr/);
+  assert.doesNotMatch(injectiveClient, /Wallet\.Keplr/);
   assert.match(swipeApp, /LONG_PRESS_MS\s*=\s*560/);
-  assert.match(swipeApp, /LOCAL_PRIVATE_KEY_STORAGE_KEY/);
-  assert.match(swipeApp, /localStorage\.getItem/);
-  assert.match(swipeApp, /localStorage\.setItem/);
+  assert.match(swipeApp, /connectPhantomWallet/);
+  assert.match(swipeApp, /restorePhantomWallet/);
+  assert.match(swipeApp, /watchPhantomWallet/);
+  assert.match(swipeApp, /disconnectPhantomWallet/);
+  assert.match(swipeApp, /Connect Phantom/);
+  assert.match(swipeApp, /Confirm in Phantom/);
+  assert.match(swipeApp, /LEGACY_PRIVATE_KEY_STORAGE_KEY/);
   assert.match(swipeApp, /localStorage\.removeItem/);
-  assert.match(swipeApp, /privateKeyRef/);
+  assert.doesNotMatch(swipeApp, /LOCAL_PRIVATE_KEY_STORAGE_KEY/);
+  assert.doesNotMatch(swipeApp, /localStorage\.getItem/);
+  assert.doesNotMatch(swipeApp, /localStorage\.setItem/);
+  assert.doesNotMatch(swipeApp, /privateKeyRef/);
   assert.match(
     swipeApp,
     /type="range"\s+min="1"\s+max="500"\s+step="1"\s+value=\{maxNotional\}/,

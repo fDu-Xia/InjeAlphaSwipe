@@ -15,19 +15,18 @@ discussion.
 - Three-direction pointer, touch, and keyboard controls
 - Discover, Position, and Settings navigation
 - Live Injective Mainnet positions and unrealized PnL
-- Local browser private-key signing with no wallet connection
+- Phantom wallet connection with linked Injective address discovery
 - Injective Mainnet derivative-market discovery, live orderbook lookup, gas
   simulation, signing, and broadcast
-- Direct broadcast on horizontal swipe, with no second confirmation
+- Phantom-confirmed EIP-712 signing for entries and position closes
 - Tap-only details and long-press contextual Signal AI
 
-## Private-key safety
+## Wallet safety
 
-The private key is stored in the current browser's local storage so it can be
-restored after refresh. It is not sent to the AlphaSwipe server. Direct signing
-removes the protection of a wallet confirmation screen, and a locally stored
-key can be read by anyone with access to this browser profile, so use a
-dedicated low-balance Injective trading account rather than a primary wallet.
+AlphaSwipe never requests or stores a private key or seed phrase. Phantom
+provides the selected public EVM address, which is mapped to its Injective
+address. Every Mainnet entry and close request must be approved in Phantom
+before it can be broadcast.
 
 ## Run locally
 

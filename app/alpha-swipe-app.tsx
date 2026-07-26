@@ -9,10 +9,7 @@ import {
   CircleUserRound,
   Compass,
   ExternalLink,
-  Eye,
-  EyeOff,
   Flame,
-  KeyRound,
   Landmark,
   LoaderCircle,
   LockKeyhole,
@@ -25,6 +22,7 @@ import {
   TriangleAlert,
   TrendingDown,
   TrendingUp,
+  WalletCards,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,11 +33,15 @@ import {
 } from "./news-data";
 import {
   closeDerivativePosition,
-  deriveInjectiveAddress,
+  connectPhantomWallet,
+  disconnectPhantomWallet,
   fetchDerivativePositions,
   placeDerivativeMarketOrder,
+  restorePhantomWallet,
+  watchPhantomWallet,
   type DerivativePosition,
   type OrderSide,
+  type PhantomWalletConnection,
 } from "@/lib/injective-client";
 
 type ActiveTab = "discover" | "position" | "settings";
@@ -56,7 +58,7 @@ const SWIPE_TRIGGER_PX = 88;
 const FULL_SIZE_SWIPE_PX = 220;
 const MIN_SWIPE_NOTIONAL = 1;
 const POSITION_REFRESH_MS = 10_000;
-const LOCAL_PRIVATE_KEY_STORAGE_KEY = "alphaswipe.injectivePrivateKey";
+const LEGACY_PRIVATE_KEY_STORAGE_KEY = "alphaswipe.injectivePrivateKey";
 
 function getSwipeNotional(distance: number, maxNotional: number) {
   const safeMax = Math.max(MIN_SWIPE_NOTIONAL, maxNotional);
@@ -118,28 +120,11 @@ function shortAddress(address: string) {
   return `${address.slice(0, 7)}…${address.slice(-5)}`;
 }
 
-function readStoredPrivateKey() {
+function clearLegacyStoredPrivateKey() {
   try {
-    return window.localStorage.getItem(LOCAL_PRIVATE_KEY_STORAGE_KEY)?.trim() || "";
+    window.localStorage.removeItem(LEGACY_PRIVATE_KEY_STORAGE_KEY);
   } catch {
-    return "";
-  }
-}
-
-function storePrivateKey(privateKey: string) {
-  try {
-    window.localStorage.setItem(LOCAL_PRIVATE_KEY_STORAGE_KEY, privateKey);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function clearStoredPrivateKey() {
-  try {
-    window.localStorage.removeItem(LOCAL_PRIVATE_KEY_STORAGE_KEY);
-  } catch {
-    // Local storage can be unavailable in restricted browser modes.
+    // Ignore restricted storage modes; AlphaSwipe never reads the legacy value.
   }
 }
 
@@ -328,10 +313,9 @@ export function AlphaSwipeApp() {
   const [positionsUpdatedAt, setPositionsUpdatedAt] = useState(0);
   const [maxNotional, setMaxNotional] = useState(100);
   const [leverage, setLeverage] = useState(3);
-  const [privateKeyDraft, setPrivateKeyDraft] = useState("");
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
-  const [signerAddress, setSignerAddress] = useState("");
-  const [keyBusy, setKeyBusy] = useState(false);
+  const [walletConnection, setWalletConnection] =
+    useState<PhantomWalletConnection | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
   const [tradeBusy, setTradeBusy] = useState(false);
   const [activeTradeNotional, setActiveTradeNotional] = useState(0);
   const [closeConfirmKey, setCloseConfirmKey] = useState("");
@@ -341,7 +325,6 @@ export function AlphaSwipeApp() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
-  const privateKeyRef = useRef("");
   const positionsRequestInFlightRef = useRef(false);
   const chatMessageId = useRef(0);
   const pointer = useRef({
@@ -354,6 +337,7 @@ export function AlphaSwipeApp() {
   });
 
   const current = signals[index] ?? null;
+  const signerAddress = walletConnection?.injectiveAddress ?? "";
   const swipeNotional = getSwipeNotional(Math.abs(drag.x), maxNotional);
   const totalUnrealizedPnl = positions.reduce(
     (sum, position) => sum + position.unrealizedPnl,
@@ -374,30 +358,36 @@ export function AlphaSwipeApp() {
   }, []);
 
   useEffect(() => {
-    const storedPrivateKey = readStoredPrivateKey();
-    if (!storedPrivateKey) return;
-
     let cancelled = false;
-    setKeyBusy(true);
-    void deriveInjectiveAddress(storedPrivateKey)
-      .then((address) => {
-        if (cancelled) return;
-        privateKeyRef.current = storedPrivateKey;
-        setSignerAddress(address);
-        setPrivateKeyDraft("");
-        setPositionsError("");
+    let stopWatching: () => void = () => {};
+    clearLegacyStoredPrivateKey();
+    setWalletBusy(true);
+    void restorePhantomWallet()
+      .then((connection) => {
+        if (!cancelled) setWalletConnection(connection);
       })
-      .catch(() => {
-        if (cancelled) return;
-        clearStoredPrivateKey();
-        privateKeyRef.current = "";
-      })
+      .catch(() => undefined)
       .finally(() => {
-        if (!cancelled) setKeyBusy(false);
+        if (!cancelled) setWalletBusy(false);
       });
+    void watchPhantomWallet((connection) => {
+      if (cancelled) return;
+      setWalletConnection(connection);
+      setPositions([]);
+      setPositionsError("");
+      setPositionsUpdatedAt(0);
+      setCloseConfirmKey("");
+      setClosingPositionKey("");
+    })
+      .then((stop) => {
+        if (cancelled) stop();
+        else stopWatching = stop;
+      })
+      .catch(() => undefined);
 
     return () => {
       cancelled = true;
+      stopWatching();
     };
   }, []);
 
@@ -488,8 +478,8 @@ export function AlphaSwipeApp() {
   const executeSwipeOrder = useCallback(
     async (side: OrderSide, orderNotional: number) => {
       if (!current || tradeBusy || exitAction) return;
-      if (!signerAddress || !privateKeyRef.current) {
-        showToast("Add a private key in Settings first");
+      if (!signerAddress) {
+        showToast("Connect Phantom in Settings first");
         setActiveTab("settings");
         return;
       }
@@ -497,11 +487,11 @@ export function AlphaSwipeApp() {
       setTradeBusy(true);
       setActiveTradeNotional(orderNotional);
       showToast(
-        `Signing ${side} · $${formatNotional(orderNotional)} · Mainnet`,
+        `Approve ${side} · $${formatNotional(orderNotional)} in Phantom`,
       );
       try {
         const result = await placeDerivativeMarketOrder({
-          privateKey: privateKeyRef.current,
+          injectiveAddress: signerAddress,
           marketQuery: current.marketQuery,
           side,
           notional: orderNotional,
@@ -550,13 +540,13 @@ export function AlphaSwipeApp() {
 
   const closePosition = useCallback(
     async (position: DerivativePosition) => {
-      if (!signerAddress || !privateKeyRef.current || closingPositionKey) return;
+      if (!signerAddress || closingPositionKey) return;
       const positionKey = getPositionKey(position);
       setClosingPositionKey(positionKey);
-      showToast(`Closing ${position.ticker} · reduce-only`);
+      showToast(`Approve ${position.ticker} close in Phantom`);
       try {
         const result = await closeDerivativePosition({
-          privateKey: privateKeyRef.current,
+          injectiveAddress: signerAddress,
           marketId: position.marketId,
           subaccountId: position.subaccountId,
           positionSide: position.side,
@@ -709,43 +699,44 @@ export function AlphaSwipeApp() {
     releasePointer(event);
   };
 
-  const saveSessionKey = async () => {
-    const trimmedPrivateKey = privateKeyDraft.trim();
-    if (!trimmedPrivateKey) return;
-    setKeyBusy(true);
+  const connectWallet = async () => {
+    if (walletBusy) return;
+    setWalletBusy(true);
     try {
-      const address = await deriveInjectiveAddress(trimmedPrivateKey);
-      const stored = storePrivateKey(trimmedPrivateKey);
-      privateKeyRef.current = trimmedPrivateKey;
-      setSignerAddress(address);
-      setPrivateKeyDraft("");
-      setShowPrivateKey(false);
+      const connection = await connectPhantomWallet();
+      setWalletConnection(connection);
       setPositions([]);
       setPositionsError("");
       setPositionsUpdatedAt(0);
-      showToast(
-        stored
-          ? `Local key saved · ${shortAddress(address)}`
-          : `Session key ready · storage blocked`,
-      );
+      showToast(`Phantom connected · ${shortAddress(connection.injectiveAddress)}`);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Invalid private key");
+      showToast(
+        error instanceof Error ? error.message : "Could not connect Phantom",
+      );
     } finally {
-      setKeyBusy(false);
+      setWalletBusy(false);
     }
   };
 
-  const removeSessionKey = () => {
-    privateKeyRef.current = "";
-    clearStoredPrivateKey();
-    setPrivateKeyDraft("");
-    setSignerAddress("");
-    setPositions([]);
-    setPositionsError("");
-    setPositionsUpdatedAt(0);
-    setCloseConfirmKey("");
-    setClosingPositionKey("");
-    showToast("Local key cleared");
+  const disconnectWallet = async () => {
+    if (walletBusy) return;
+    setWalletBusy(true);
+    try {
+      await disconnectPhantomWallet();
+      setWalletConnection(null);
+      setPositions([]);
+      setPositionsError("");
+      setPositionsUpdatedAt(0);
+      setCloseConfirmKey("");
+      setClosingPositionKey("");
+      showToast("Phantom disconnected");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Could not disconnect Phantom",
+      );
+    } finally {
+      setWalletBusy(false);
+    }
   };
 
   const sendChatMessage = async (question = chatInput) => {
@@ -857,10 +848,10 @@ export function AlphaSwipeApp() {
                     {tradeBusy && (
                       <div className="trade-lock">
                         <LoaderCircle className="spin" />
-                        <strong>Signing Mainnet order</strong>
+                        <strong>Confirm in Phantom</strong>
                         <small>
                           ${formatNotional(activeTradeNotional)} · {leverage}×
-                          leverage
+                          leverage · wallet approval required
                         </small>
                       </div>
                     )}
@@ -953,7 +944,7 @@ export function AlphaSwipeApp() {
                   Refresh
                 </button>
               ) : (
-                <span className="network-chip"><i /> Add key</span>
+                <span className="network-chip"><i /> Connect wallet</span>
               )}
             </header>
 
@@ -965,7 +956,7 @@ export function AlphaSwipeApp() {
                       <i />
                       {shortAddress(signerAddress)}
                     </span>
-                    <small>Session signer · live indexer</small>
+                    <small>Phantom wallet · live indexer</small>
                   </div>
                   <div className="pnl-hero">
                     <small>Total unrealized PnL</small>
@@ -1153,16 +1144,15 @@ export function AlphaSwipeApp() {
               </>
             ) : (
               <div className="position-connect-state">
-                <span><KeyRound /></span>
-                <h2>Add a session trading key</h2>
+                <span><WalletCards /></span>
+                <h2>Connect Phantom</h2>
                 <p>
-                  Positions are read from the Injective address derived inside
-                  this browser. The private key is stored locally on this
-                  device and is never uploaded.
+                  Connect Phantom to read the linked Injective account and
+                  approve Mainnet orders in your wallet.
                 </p>
                 <button type="button" onClick={() => setActiveTab("settings")}>
                   <LockKeyhole />
-                  Open key settings
+                  Open wallet settings
                 </button>
                 <small>Mainnet orders use real funds.</small>
               </div>
@@ -1174,90 +1164,87 @@ export function AlphaSwipeApp() {
           <section className="page-view settings-view">
             <header className="page-heading">
               <div>
-                <span>LOCAL SESSION</span>
+                <span>WALLET SIGNING</span>
                 <h1>Settings</h1>
               </div>
               <CircleUserRound />
             </header>
             <div className="settings-scroll">
               <section className="settings-profile">
-                <span>{signerAddress ? <LockKeyhole /> : <KeyRound />}</span>
+                <span>
+                  {signerAddress ? <LockKeyhole /> : <WalletCards />}
+                </span>
                 <div>
                   <strong>
                     {signerAddress
                       ? shortAddress(signerAddress)
-                      : "No session signer"}
+                      : "Phantom not connected"}
                   </strong>
                   <small>
                     {signerAddress
-                      ? "Private key saved on this device"
-                      : "Add a key to enable direct trading"}
+                      ? "Wallet confirmation protects every trade"
+                      : "Connect Phantom to enable trading"}
                   </small>
                 </div>
               </section>
 
-              <section className="settings-card private-key-card">
+              <section className="settings-card wallet-card">
                 <div className="settings-title">
                   <div>
-                    <h2>Session private key</h2>
-                    <p>Used locally for direct Mainnet signing.</p>
+                    <h2>Phantom wallet</h2>
+                    <p>Address access and wallet-confirmed signing.</p>
                   </div>
-                  <LockKeyhole />
+                  <WalletCards />
                 </div>
-                {signerAddress ? (
-                  <div className="key-ready-state">
-                    <span><i /> Ready for direct signing</span>
-                    <strong>{signerAddress}</strong>
-                    <button type="button" onClick={removeSessionKey}>
-                      Clear saved key
+                {walletConnection ? (
+                  <div className="wallet-ready-state">
+                    <span><i /> Connected to Injective Mainnet</span>
+                    <div>
+                      <small>Injective address</small>
+                      <strong>{walletConnection.injectiveAddress}</strong>
+                    </div>
+                    <div>
+                      <small>Phantom EVM address</small>
+                      <strong>{walletConnection.ethereumAddress}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void disconnectWallet()}
+                      disabled={walletBusy}
+                    >
+                      {walletBusy ? "Disconnecting…" : "Disconnect Phantom"}
                     </button>
                   </div>
                 ) : (
-                  <>
-                    <label className="private-key-input">
-                      <span>Private key</span>
-                      <div>
-                        <input
-                          type={showPrivateKey ? "text" : "password"}
-                          value={privateKeyDraft}
-                          onChange={(event) =>
-                            setPrivateKeyDraft(event.target.value)
-                          }
-                          placeholder="64-character hex key"
-                          autoComplete="off"
-                          autoCapitalize="none"
-                          spellCheck={false}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPrivateKey((value) => !value)}
-                          aria-label={
-                            showPrivateKey
-                              ? "Hide private key"
-                              : "Show private key"
-                          }
-                        >
-                          {showPrivateKey ? <EyeOff /> : <Eye />}
-                        </button>
-                      </div>
-                    </label>
-                    <button
-                      className="save-key-button"
-                      type="button"
-                      onClick={() => void saveSessionKey()}
-                      disabled={keyBusy || !privateKeyDraft.trim()}
-                    >
-                      {keyBusy ? <LoaderCircle className="spin" /> : <KeyRound />}
-                      Save local key
-                    </button>
-                  </>
+                  <button
+                    className="wallet-connect-button"
+                    type="button"
+                    onClick={() => void connectWallet()}
+                    disabled={walletBusy}
+                  >
+                    {walletBusy ? (
+                      <LoaderCircle className="spin" />
+                    ) : (
+                      <WalletCards />
+                    )}
+                    {walletBusy ? "Connecting…" : "Connect Phantom"}
+                  </button>
                 )}
-                <p className="key-security-note">
-                  Never paste a seed phrase. This version accepts a raw private
-                  key, stores it in this browser’s local storage for refreshes,
-                  and never sends it to the AlphaSwipe server. Use a dedicated
-                  low-balance trading key.
+                <p className="wallet-security-note">
+                  AlphaSwipe never asks for or stores a private key or seed
+                  phrase. Phantom exposes the selected public address and asks
+                  you to approve every transaction.
                 </p>
+                {!walletConnection && (
+                  <a
+                    className="phantom-install-link"
+                    href="https://phantom.com/download"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Get Phantom <ExternalLink />
+                  </a>
+                )}
               </section>
 
               <section className="settings-card">
@@ -1273,9 +1260,8 @@ export function AlphaSwipeApp() {
                   <small>injective-1</small>
                 </div>
                 <p className="settings-note danger-copy">
-                  Swiping left or right signs and broadcasts immediately with
-                  real funds. There is no wallet popup and no second
-                  confirmation.
+                  Swiping left or right prepares a real-funds order. It is
+                  broadcast only after you approve the request in Phantom.
                 </p>
               </section>
 
@@ -1320,10 +1306,10 @@ export function AlphaSwipeApp() {
               <section className="risk-note">
                 <ShieldCheck />
                 <p>
-                  Direct private-key trading removes the wallet confirmation
-                  boundary. Use a dedicated low-balance trading account, not a
-                  primary wallet. News and AI responses are research prompts,
-                  not financial advice.
+                  Phantom confirmation protects the signing boundary, but
+                  approved Mainnet orders still use real funds. Review the
+                  market, side, size, and leverage before signing. News and AI
+                  responses are research prompts, not financial advice.
                 </p>
               </section>
             </div>
