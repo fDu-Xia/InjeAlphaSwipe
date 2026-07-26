@@ -9,7 +9,8 @@ discussion.
 
 - Mobile-first card stack adapted from PaperSwipe
 - A fixed signal universe: META, NVDA, AAPL, TSLA, BTC, ETH, BNB, and INJ
-- Live, source-restricted RSS refresh with editorial fallbacks
+- English-only Financial Modeling Prep news from the latest seven-day window
+- Cached English AI research covering signal, macro, industry, fundamentals, and risk
 - Earnings metrics and analysis for every stock signal
 - Three-direction pointer, touch, and keyboard controls
 - Discover, Position, and Settings navigation
@@ -47,6 +48,7 @@ npm test
 npx tsc --noEmit
 ```
 
-`app/api/signals/route.ts` refreshes one source-restricted headline for each
-approved symbol and falls back to the verified editorial analysis in
-`app/news-data.ts` when a feed is unavailable.
+`scripts/sync-news.mjs` refreshes the approved stock and crypto symbols from
+Financial Modeling Prep. `scripts/enrich-news.mjs` builds the English research
+cache, while `app/api/signals/route.ts` falls back to the verified editorial
+analysis in `app/news-data.ts` when the cache is unavailable.

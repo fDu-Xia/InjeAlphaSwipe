@@ -13,11 +13,9 @@ type CachedArticle = {
   publishedDate: string;
   publisher: string;
   title: string;
-  titleZh: string;
   image: string;
   site: string;
   text: string;
-  textZh: string;
   url: string;
   analysis?: SignalResearch;
 };
@@ -36,7 +34,7 @@ const SYMBOL_MAP: Record<string, SignalSymbol> = {
 function formatPublishedDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("zh-CN", {
+  return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -52,26 +50,29 @@ function fallbackAnalysis(
     signal: {
       direction: "neutral",
       degree: "weak",
-      label: "中性观察",
+      label: "Neutral",
       confidence: 55,
       description:
-        article.textZh || article.text || "当前新闻信息有限，暂不足以形成方向性判断。",
+        article.text ||
+        "The available article context is too limited for a directional view.",
     },
-    macro: "当前缓存中没有可核验的宏观快照。",
+    macro: "No verifiable macro snapshot is available in the current cache.",
     industry: {
-      name: article.category === "stock" ? "公司所属行业" : "数字资产行业",
-      summary: "当前缓存中没有可核验的行业分析。",
+      name: article.category === "stock" ? "Company industry" : "Digital assets",
+      summary: "No verifiable industry analysis is available in the current cache.",
     },
     fundamentals: {
-      overview: `${marketQuery} 的基本面分析尚未生成。`,
-      recentMarket: "当前缓存中没有最新行情快照。",
+      overview: `Fundamental analysis for ${marketQuery} has not been generated yet.`,
+      recentMarket: "No recent market snapshot is available in the current cache.",
       recentEarnings:
         article.category === "stock"
-          ? "当前缓存中没有最近财报快照。"
-          : "加密资产没有公司财报，应关注网络活动、费用、供给和生态采用。",
+          ? "No recent earnings snapshot is available in the current cache."
+          : "Not applicable. Crypto fundamentals should focus on network activity, fees, supply, and ecosystem adoption.",
       metrics: [],
     },
-    risks: ["单条新闻可能不足以形成持续交易信号，交易前应核对原文与市场数据。"],
+    risks: [
+      "A single article may not create a durable trading signal. Verify the source and current market data before trading.",
+    ],
     dataAsOf: formatPublishedDate(article.publishedDate),
   };
 }
@@ -82,7 +83,7 @@ function articleToSignal(article: CachedArticle): NewsItem | null {
   if (!base) return null;
 
   const publisher = article.publisher || article.site || "Financial Modeling Prep";
-  const translatedText = article.textZh || article.text;
+  const articleText = article.text;
   const analysis = article.analysis ?? fallbackAnalysis(article, marketQuery);
   const highImpact =
     analysis.signal.direction !== "neutral" &&
@@ -92,26 +93,28 @@ function articleToSignal(article: CachedArticle): NewsItem | null {
     ...base,
     id: article.id,
     category: article.category,
-    title: article.titleZh || article.title,
-    hook: translatedText || "打开卡片查看这条新闻的原始来源。",
+    title: article.title,
+    hook: articleText || "Open the card to view the original article.",
     summary:
-      translatedText ||
-      "FMP 提供了标题与原文链接，但没有提供可翻译的新闻摘要。",
+      articleText ||
+      "FMP supplied the headline and source link but no article summary.",
     source: publisher,
     published: formatPublishedDate(article.publishedDate),
     sourceUrl: article.url,
     tags: [
       marketQuery,
-      article.category === "stock" ? "股票新闻" : "加密新闻",
+      article.category === "stock" ? "Stock news" : "Crypto news",
       publisher,
     ].slice(0, 3),
     impact: highImpact ? "High" : "Medium",
     confidence: analysis.signal.confidence,
-    horizon: "新闻驱动",
-    bullCase: "若新闻中的进展被后续数据确认，可能改善市场对该标的的预期。",
-    bearCase: "单条新闻未必能转化为持续的价格或基本面影响，需要更多证据确认。",
-    catalyst: "后续公告、成交量与价格反应",
-    risk: "标题与摘要信息有限，交易前需核对原文",
+    horizon: "News-driven",
+    bullCase:
+      "If subsequent data confirms the development, expectations for the asset may improve.",
+    bearCase:
+      "A single article may not translate into a durable price or fundamental impact.",
+    catalyst: "Follow-up disclosures, volume, and price response",
+    risk: "Headline context is limited; verify the source before trading",
     earnings: undefined,
     analysis,
   };
@@ -134,7 +137,7 @@ export async function GET() {
       source: usingLocalCache ? "financialmodelingprep" : "bundled-fallback",
       refreshedAt: usingLocalCache ? newsCache.syncedAt : null,
       windowStart: usingLocalCache ? newsCache.windowStart : null,
-      translation: usingLocalCache ? newsCache.translation : null,
+      language: "en",
     },
     {
       headers: {

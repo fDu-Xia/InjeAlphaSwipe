@@ -56,7 +56,7 @@ let marketsCache: any[] | undefined;
 function normalizePrivateKey(value: string) {
   const normalized = value.trim().replace(/^0x/i, "");
   if (!/^[a-f0-9]{64}$/i.test(normalized)) {
-    throw new Error("请输入 64 位十六进制 Injective 私钥。");
+    throw new Error("Enter a 64-character hexadecimal Injective private key.");
   }
   return normalized;
 }
@@ -84,16 +84,16 @@ function getErrorText(error: unknown) {
 function normalizeInjectiveOrderError(error: unknown) {
   const message = getErrorText(error);
   if (/account .* not found/i.test(message)) {
-    return "账户未激活或余额不足：请先给这个 Injective 地址充值可用资金。";
+    return "Account not activated or insufficient balance. Fund this Injective address before trading.";
   }
   if (
     /insufficient funds|insufficient balance|spendable balance|insufficient fee/i.test(
       message,
     )
   ) {
-    return "余额不足：可用余额不足以支付保证金或 gas。";
+    return "Insufficient balance to cover margin or gas.";
   }
-  return message || "Injective 拒绝了这笔订单。";
+  return message || "Injective rejected the order.";
 }
 
 async function loadInjectiveModules() {
@@ -144,7 +144,7 @@ export async function deriveInjectiveAddress(privateKeyValue: string) {
       normalizePrivateKey(privateKeyValue),
     ).toBech32();
   } catch {
-    throw new Error("私钥格式无效，无法派生 Injective 地址。");
+    throw new Error("Invalid private key. Unable to derive an Injective address.");
   }
 }
 
@@ -158,8 +158,8 @@ export async function fetchDerivativePositions(
     api.fetchPositionsV2({ address: injectiveAddress }),
     fetchMarkets(modules),
   ]);
-  const marketsById = new Map(
-    markets.map((market) => [String(market.marketId), market]),
+  const marketsById = new Map<string, any>(
+    markets.map((market: any) => [String(market.marketId), market]),
   );
 
   return response.positions
@@ -281,7 +281,7 @@ async function findLiquidDerivativeMarket(
   const candidates = findMarketCandidates(markets, marketQuery);
   if (!candidates.length) {
     throw new Error(
-      `Injective Mainnet 暂未找到 ${marketQuery} 的可交易永续市场。`,
+      `No tradable ${marketQuery} perpetual market was found on Injective Mainnet.`,
     );
   }
 
@@ -294,8 +294,8 @@ async function findLiquidDerivativeMarket(
   }
 
   throw new Error(
-    `${marketQuery} 当前没有足够的 Mainnet 订单簿流动性。已检查：${checkedTickers.join(
-      "、",
+    `${marketQuery} does not currently have enough Mainnet order-book liquidity. Checked: ${checkedTickers.join(
+      ", ",
     )}`,
   );
 }
@@ -321,7 +321,7 @@ function getMarketOrderPricing(
   );
 
   if (!Number.isFinite(referencePrice) || referencePrice <= 0) {
-    throw new Error(`${market.ticker} 当前订单簿价格无效，请稍后重试。`);
+    throw new Error(`${market.ticker} has an invalid order-book price. Try again shortly.`);
   }
 
   const protectedPrice =
@@ -360,7 +360,7 @@ function getEntryOrderSize(
   );
 
   if (!price.isFinite() || price.lte(0) || !tick.isFinite() || tick.lte(0)) {
-    throw new Error(`${market.ticker} 当前交易步进无效，请稍后重试。`);
+    throw new Error(`${market.ticker} has an invalid trading increment. Try again shortly.`);
   }
 
   const requestedSteps = requested
@@ -381,9 +381,9 @@ function getEntryOrderSize(
 
   if (actualNotional.gt(cap)) {
     throw new Error(
-      `${market.ticker} 当前最小可成交约 $${actualNotional.toFixed(
+      `${market.ticker} currently requires at least $${actualNotional.toFixed(
         2,
-      )}，超过你设置的 $${cap.toFixed(2)} 单次上限。`,
+      )}, which exceeds your $${cap.toFixed(2)} per-trade cap.`,
     );
   }
 
@@ -511,11 +511,11 @@ export async function closeDerivativePosition(
   const injectiveAddress = privateKey.toBech32();
   const markets = await fetchMarkets(modules);
   const market = markets.find(
-    (candidate) => String(candidate.marketId) === input.marketId,
+    (candidate: any) => String(candidate.marketId) === input.marketId,
   );
 
   if (!market) {
-    throw new Error("Injective Mainnet 暂未找到这个持仓对应的市场。");
+    throw new Error("The market for this position was not found on Injective Mainnet.");
   }
 
   const endpoints = modules.getNetworkEndpoints(modules.Network.Mainnet);
@@ -528,7 +528,7 @@ export async function closeDerivativePosition(
   const bestLevel = getBestOrderbookLevel(orderbook, closeSide);
 
   if (!bestLevel) {
-    throw new Error(`${market.ticker} 当前没有足够的订单簿流动性完成平仓。`);
+    throw new Error(`${market.ticker} does not have enough order-book liquidity to close the position.`);
   }
 
   const { allowedPrice, multipliers, quoteDecimals } = getMarketOrderPricing(
@@ -543,7 +543,7 @@ export async function closeDerivativePosition(
   );
 
   if (Number(allowedQuantity) <= 0) {
-    throw new Error(`${market.ticker} 当前持仓数量无效，无法平仓。`);
+    throw new Error(`${market.ticker} has an invalid position quantity and cannot be closed.`);
   }
 
   const msg = modules.MsgCreateDerivativeMarketOrder.fromJSON({

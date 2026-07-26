@@ -149,8 +149,9 @@ type AiChatResponse = {
 };
 
 function formatChatError(error: unknown) {
-  const message = error instanceof Error ? error.message : "AI 对话暂时不可用";
-  return `AI 对话暂时不可用：${message}`;
+  const message =
+    error instanceof Error ? error.message : "Signal AI is temporarily unavailable";
+  return `Signal AI is temporarily unavailable: ${message}`;
 }
 
 function fallbackResearch(signal: NewsItem): SignalResearch {
@@ -158,25 +159,27 @@ function fallbackResearch(signal: NewsItem): SignalResearch {
     signal: {
       direction: "neutral",
       degree: "weak",
-      label: "中性观察",
+      label: "Neutral",
       confidence: signal.confidence,
       description: signal.summary,
     },
-    macro: "宏观快照正在加载，暂不对利率、美元与风险偏好作额外推断。",
+    macro:
+      "The macro snapshot is loading. No additional inference is made about rates, the dollar, or risk appetite.",
     industry: {
-      name: signal.category === "stock" ? "公司所属行业" : "数字资产行业",
-      summary: "行业数据正在加载，请结合新闻原文判断影响范围。",
+      name: signal.category === "stock" ? "Company industry" : "Digital assets",
+      summary:
+        "Industry data is loading. Use the source article to judge the likely scope of the impact.",
     },
     fundamentals: {
-      overview: "标的基本面快照正在加载。",
-      recentMarket: "最新行情数据正在加载。",
+      overview: "The asset fundamentals snapshot is loading.",
+      recentMarket: "Recent market data is loading.",
       recentEarnings:
         signal.category === "stock"
-          ? "最近财报数据正在加载。"
-          : "加密资产没有公司财报，应关注网络使用、费用、供给与生态活跃度。",
+          ? "Recent earnings data is loading."
+          : "Not applicable. Crypto fundamentals should focus on network usage, fees, supply, and ecosystem activity.",
       metrics: [],
     },
-    risks: [signal.risk || "单条新闻可能不足以形成持续交易信号。"],
+    risks: [signal.risk || "A single article may not create a durable trading signal."],
     dataAsOf: signal.published,
   };
 }
@@ -208,15 +211,16 @@ function SignalBack({
             <SignalIcon />
           </div>
           <div className="verdict-copy">
-            <span>新闻信号评价</span>
+            <span>News signal</span>
             <strong>{research.signal.label}</strong>
             <small>
               {research.signal.degree === "strong"
-                ? "强"
+                ? "Strong"
                 : research.signal.degree === "moderate"
-                  ? "中"
-                  : "弱"}
-              度 · {research.signal.confidence}% 置信度
+                  ? "Moderate"
+                  : "Weak"}
+              {" · "}
+              {research.signal.confidence}% confidence
             </small>
           </div>
           <button
@@ -233,7 +237,7 @@ function SignalBack({
         <section className="research-section">
           <div className="research-heading">
             <Landmark />
-            <span>当前宏观分析</span>
+            <span>Macro analysis</span>
           </div>
           <p>{research.macro}</p>
         </section>
@@ -241,7 +245,7 @@ function SignalBack({
         <section className="research-section">
           <div className="research-heading">
             <Building2 />
-            <span>行业分析 · {research.industry.name}</span>
+            <span>Industry analysis · {research.industry.name}</span>
           </div>
           <p>{research.industry.summary}</p>
         </section>
@@ -249,19 +253,19 @@ function SignalBack({
         <section className="research-section fundamentals-section">
           <div className="research-heading">
             <BarChart3 />
-            <span>标的基本面</span>
+            <span>Asset fundamentals</span>
           </div>
           <div className="fundamental-copy">
             <div>
-              <small>基本面判断</small>
+              <small>Fundamental view</small>
               <p>{research.fundamentals.overview}</p>
             </div>
             <div>
-              <small>最近行情</small>
+              <small>Recent market</small>
               <p>{research.fundamentals.recentMarket}</p>
             </div>
             <div>
-              <small>最近财报</small>
+              <small>Recent earnings</small>
               <p>{research.fundamentals.recentEarnings}</p>
             </div>
           </div>
@@ -285,7 +289,7 @@ function SignalBack({
         <section className="research-section risk-section">
           <div className="research-heading">
             <TriangleAlert />
-            <span>风险提示</span>
+            <span>Risk factors</span>
           </div>
           <ul>
             {research.risks.map((risk) => (
@@ -294,17 +298,17 @@ function SignalBack({
           </ul>
         </section>
 
-        <div className="analysis-as-of">数据截至 {research.dataAsOf}</div>
+        <div className="analysis-as-of">Data as of {research.dataAsOf}</div>
         <a
           className="source-link"
           href={signal.sourceUrl}
           target="_blank"
           rel="noreferrer"
         >
-          查看新闻原文 <ExternalLink />
+          View original article <ExternalLink />
         </a>
         <button className="ask-ai-button" type="button" onClick={onAskAi}>
-          <MessageCircle /> 和 AI 讨论这条信号
+          <MessageCircle /> Discuss with Signal AI
         </button>
       </div>
     </div>
@@ -444,7 +448,7 @@ export function AlphaSwipeApp() {
         setPositionsUpdatedAt(Date.now());
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "持仓读取失败";
+          error instanceof Error ? error.message : "Failed to load positions";
         setPositionsError(message);
         showToast(message);
       } finally {
@@ -485,7 +489,7 @@ export function AlphaSwipeApp() {
     async (side: OrderSide, orderNotional: number) => {
       if (!current || tradeBusy || exitAction) return;
       if (!signerAddress || !privateKeyRef.current) {
-        showToast("请先在 Settings 添加会话私钥");
+        showToast("Add a private key in Settings first");
         setActiveTab("settings");
         return;
       }
@@ -513,7 +517,7 @@ export function AlphaSwipeApp() {
         );
         void refreshPositions(result.injectiveAddress);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "订单提交失败");
+        showToast(error instanceof Error ? error.message : "Order submission failed");
       } finally {
         setTradeBusy(false);
         setActiveTradeNotional(0);
@@ -562,7 +566,7 @@ export function AlphaSwipeApp() {
         showToast(`Close broadcast · ${result.txHash.slice(0, 10)}…`);
         await refreshPositions(result.injectiveAddress);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "平仓提交失败");
+        showToast(error instanceof Error ? error.message : "Close order failed");
       } finally {
         setClosingPositionKey("");
       }
@@ -606,7 +610,7 @@ export function AlphaSwipeApp() {
       {
         id: `intro-${current.id}`,
         role: "assistant",
-        text: `正在讨论 ${current.marketQuery}：${current.title}。你可以问我财报、正反逻辑、催化剂、风险，或者这条信号最容易在哪里失效。`,
+        text: `Discussing ${current.marketQuery}: ${current.title}. Ask about earnings, the bull and bear cases, catalysts, risks, or what could invalidate this signal.`,
       },
     ]);
     setChatInput("");
@@ -725,7 +729,7 @@ export function AlphaSwipeApp() {
           : `Session key ready · storage blocked`,
       );
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "私钥格式无效");
+      showToast(error instanceof Error ? error.message : "Invalid private key");
     } finally {
       setKeyBusy(false);
     }
@@ -768,8 +772,9 @@ export function AlphaSwipeApp() {
       });
       const payload = (await response.json().catch(() => ({}))) as AiChatResponse;
       if (!response.ok || !payload.answer) {
-        throw new Error(payload.error || "OpenAI API 没有返回内容");
+        throw new Error(payload.error || "The OpenAI API returned no content");
       }
+      const answer = payload.answer;
 
       chatMessageId.current += 1;
       setChatMessages((messages) => [
@@ -777,7 +782,7 @@ export function AlphaSwipeApp() {
         {
           id: `assistant-${chatMessageId.current}`,
           role: "assistant",
-          text: payload.answer,
+          text: answer,
         },
       ]);
     } catch (error) {
@@ -1386,8 +1391,16 @@ export function AlphaSwipeApp() {
             </div>
             <div className="ai-prompts">
               {(current.earnings
-                ? ["解读这份财报", "最大的风险是什么？", "多头逻辑哪里会失效？"]
-                : ["核心催化剂是什么？", "最大的风险是什么？", "多头逻辑哪里会失效？"]
+                ? [
+                    "Interpret the latest earnings",
+                    "What is the biggest risk?",
+                    "What would invalidate the bull case?",
+                  ]
+                : [
+                    "What is the key catalyst?",
+                    "What is the biggest risk?",
+                    "What would invalidate the bull case?",
+                  ]
               ).map((prompt) => (
                 <button
                   type="button"

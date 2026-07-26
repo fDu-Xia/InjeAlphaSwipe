@@ -17,14 +17,16 @@ const FMP_API_BASE =
   process.env.FMP_API_BASE || "https://financialmodelingprep.com/stable";
 const DEFAULT_LLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_LLM_MODEL = "glm-4.5-air";
+const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_OPENAI_MODEL = "gpt-5.6-sol";
 const ANALYSIS_BATCH_SIZE = 4;
 const ANALYSIS_CONCURRENCY = 2;
 
 const CRYPTO_INDUSTRIES = {
-  BTCUSD: "数字资产 · 价值储存与宏观流动性",
-  ETHUSD: "智能合约平台 · L1 与链上应用",
-  BNBUSD: "交易平台生态 · L1 与应用基础设施",
-  INJUSD: "去中心化金融 · 交易基础设施与 L1",
+  BTCUSD: "Digital assets · Store of value and macro liquidity",
+  ETHUSD: "Smart-contract platforms · L1 and onchain applications",
+  BNBUSD: "Exchange ecosystem · L1 and application infrastructure",
+  INJUSD: "Decentralized finance · Trading infrastructure and L1",
 };
 
 function parseEnvFile(content) {
@@ -267,25 +269,25 @@ function findYearAgoQuarter(statements, latest) {
 function buildDisplayMetrics(category, market, earnings, ratios) {
   const metrics = [
     {
-      label: "现价",
+      label: "Spot price",
       value: formatPrice(market.price),
-      change: `日内 ${formatPercent(market.dayChangePercentage)}`,
+      change: `1d ${formatPercent(market.dayChangePercentage)}`,
       tone: toneForChange(market.dayChangePercentage),
     },
     {
-      label: "近 7 日",
+      label: "7-day move",
       value: formatPercent(market.weekChangePercentage),
-      change: `区间 ${formatPrice(market.weekLow)}–${formatPrice(market.weekHigh)}`,
+      change: `Range ${formatPrice(market.weekLow)}–${formatPrice(market.weekHigh)}`,
       tone: toneForChange(market.weekChangePercentage),
     },
     {
-      label: "市值",
+      label: "Market cap",
       value: formatCompactUsd(market.marketCap),
       change: "FMP quote",
       tone: "neutral",
     },
     {
-      label: category === "stock" ? "当日成交量" : "24h 成交量",
+      label: category === "stock" ? "Daily volume" : "24h volume",
       value: formatNumber(market.volume),
       change: "FMP quote",
       tone: "neutral",
@@ -295,19 +297,19 @@ function buildDisplayMetrics(category, market, earnings, ratios) {
   if (category === "stock" && earnings?.latest) {
     metrics.push(
       {
-        label: "季度营收",
+        label: "Quarterly revenue",
         value: formatCompactUsd(earnings.latest.revenue),
-        change: `同比 ${formatPercent(earnings.revenueYoY)}`,
+        change: `YoY ${formatPercent(earnings.revenueYoY)}`,
         tone: toneForChange(earnings.revenueYoY),
       },
       {
-        label: "季度净利润",
+        label: "Quarterly net income",
         value: formatCompactUsd(earnings.latest.netIncome),
-        change: `同比 ${formatPercent(earnings.netIncomeYoY)}`,
+        change: `YoY ${formatPercent(earnings.netIncomeYoY)}`,
         tone: toneForChange(earnings.netIncomeYoY),
       },
       {
-        label: "稀释 EPS",
+        label: "Diluted EPS",
         value:
           typeof earnings.latest.epsDiluted === "number"
             ? `$${earnings.latest.epsDiluted.toFixed(2)}`
@@ -316,39 +318,39 @@ function buildDisplayMetrics(category, market, earnings, ratios) {
         tone: "neutral",
       },
       {
-        label: "市盈率",
+        label: "P/E ratio",
         value:
           typeof ratios?.priceToEarningsRatio === "number"
             ? `${ratios.priceToEarningsRatio.toFixed(1)}×`
             : "—",
-        change: "最近年度口径",
+        change: "Latest annual period",
         tone: "neutral",
       },
     );
   } else {
     metrics.push(
       {
-        label: "50 日均价",
+        label: "50-day average",
         value: formatPrice(market.priceAvg50),
-        change: `偏离 ${formatPercent(percentageChange(market.price, market.priceAvg50))}`,
+        change: `Deviation ${formatPercent(percentageChange(market.price, market.priceAvg50))}`,
         tone: toneForChange(percentageChange(market.price, market.priceAvg50)),
       },
       {
-        label: "200 日均价",
+        label: "200-day average",
         value: formatPrice(market.priceAvg200),
-        change: `偏离 ${formatPercent(percentageChange(market.price, market.priceAvg200))}`,
+        change: `Deviation ${formatPercent(percentageChange(market.price, market.priceAvg200))}`,
         tone: toneForChange(percentageChange(market.price, market.priceAvg200)),
       },
       {
-        label: "52 周高点",
+        label: "52-week high",
         value: formatPrice(market.yearHigh),
-        change: `距高点 ${formatPercent(percentageChange(market.price, market.yearHigh))}`,
+        change: `From high ${formatPercent(percentageChange(market.price, market.yearHigh))}`,
         tone: "neutral",
       },
       {
-        label: "52 周低点",
+        label: "52-week low",
         value: formatPrice(market.yearLow),
-        change: `距低点 ${formatPercent(percentageChange(market.price, market.yearLow))}`,
+        change: `From low ${formatPercent(percentageChange(market.price, market.yearLow))}`,
         tone: "neutral",
       },
     );
@@ -471,7 +473,7 @@ async function fetchAssetSnapshot(symbol, category, apiKey, now) {
     industryName:
       profile?.industry ||
       CRYPTO_INDUSTRIES[symbol] ||
-      (category === "stock" ? "上市公司" : "数字资产"),
+      (category === "stock" ? "Public company" : "Digital asset"),
     profile,
     market,
     earnings,
@@ -494,6 +496,26 @@ function extractJsonObject(value) {
   return JSON.parse(fenced || trimmed);
 }
 
+function responsesUrl(baseUrl) {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  return normalized.endsWith("/responses")
+    ? normalized
+    : `${normalized}/responses`;
+}
+
+function extractResponsesText(payload) {
+  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+  return (
+    payload?.output
+      ?.flatMap((item) => item.content ?? [])
+      .map((part) => (typeof part.text === "string" ? part.text : ""))
+      .join("")
+      .trim() || ""
+  );
+}
+
 function normalizeDirection(value) {
   return value === "long" || value === "short" || value === "neutral"
     ? value
@@ -510,19 +532,19 @@ function normalizeDegree(value, direction) {
 function signalLabel(direction, degree) {
   if (direction === "long") {
     return degree === "strong"
-      ? "强烈看多"
+      ? "Strong bullish"
       : degree === "moderate"
-        ? "偏多"
-        : "轻微看多";
+        ? "Bullish"
+        : "Slightly bullish";
   }
   if (direction === "short") {
     return degree === "strong"
-      ? "强烈看空"
+      ? "Strong bearish"
       : degree === "moderate"
-        ? "偏空"
-        : "轻微看空";
+        ? "Bearish"
+        : "Slightly bearish";
   }
-  return degree === "moderate" ? "中性关注" : "中性观察";
+  return degree === "moderate" ? "Neutral watch" : "Neutral";
 }
 
 function normalizeAnalysis(raw, article, snapshot) {
@@ -587,13 +609,13 @@ function unavailableAnalysis(article, snapshot, macroSnapshot, reason) {
   const latestEarnings = snapshot.earnings?.latest;
   const macroParts = [
     typeof spy?.dayChangePercentage === "number"
-      ? `SPY 日内 ${formatPercent(spy.dayChangePercentage)}`
+      ? `SPY 1d ${formatPercent(spy.dayChangePercentage)}`
       : "",
     typeof qqq?.dayChangePercentage === "number"
-      ? `QQQ 日内 ${formatPercent(qqq.dayChangePercentage)}`
+      ? `QQQ 1d ${formatPercent(qqq.dayChangePercentage)}`
       : "",
     typeof treasury?.year10 === "number"
-      ? `美国 10 年期国债收益率 ${treasury.year10.toFixed(2)}%`
+      ? `U.S. 10-year Treasury yield ${treasury.year10.toFixed(2)}%`
       : "",
   ].filter(Boolean);
 
@@ -601,33 +623,33 @@ function unavailableAnalysis(article, snapshot, macroSnapshot, reason) {
     signal: {
       direction: "neutral",
       degree: "weak",
-      label: "中性观察",
+      label: "Neutral",
       confidence: 45,
-      description: `${reason}，因此不对该新闻作方向性推断，仅保留可核验市场数据。`,
+      description: `${reason}. No directional inference is made; only verifiable market data is retained.`,
     },
     macro:
       macroParts.length > 0
-        ? `${macroParts.join("，")}。在缺少完整上下文时，不把宏观快照直接解释为单一交易方向。`
-        : "当前宏观快照信息有限，不作方向性推断。",
+        ? `${macroParts.join(", ")}. Without complete context, the macro snapshot is not treated as a standalone directional signal.`
+        : "The available macro snapshot is limited, so no directional inference is made.",
     industry: {
       name: snapshot.industryName,
       summary:
-        "行业影响需要结合原始新闻和后续数据确认；当前分析不扩展模型未能完成处理的新闻内容。",
+        "Industry impact must be confirmed against the source article and subsequent data. This fallback does not extend content the model could not process.",
     },
     fundamentals: {
       overview:
-        "基本面部分仅展示 FMP 的可核验行情与财务数据，不根据未完成模型分析的新闻内容补充结论。",
-      recentMarket: `${snapshot.symbol} 现价 ${formatPrice(snapshot.market.price)}，日内 ${formatPercent(snapshot.market.dayChangePercentage)}，近 7 日 ${formatPercent(snapshot.market.weekChangePercentage)}。`,
+        "The fundamentals section only presents verifiable FMP market and financial data; it does not add conclusions from an incomplete model analysis.",
+      recentMarket: `${snapshot.symbol} trades at ${formatPrice(snapshot.market.price)}, with a 1-day move of ${formatPercent(snapshot.market.dayChangePercentage)} and a 7-day move of ${formatPercent(snapshot.market.weekChangePercentage)}.`,
       recentEarnings:
         snapshot.category === "stock" && latestEarnings
-          ? `最近财报为 ${latestEarnings.fiscalYear} ${latestEarnings.period}：营收 ${formatCompactUsd(latestEarnings.revenue)}，净利润 ${formatCompactUsd(latestEarnings.netIncome)}，稀释 EPS ${typeof latestEarnings.epsDiluted === "number" ? `$${latestEarnings.epsDiluted.toFixed(2)}` : "—"}。`
-          : "加密资产没有公司财报；应改为跟踪网络活动、费用、供给变化与生态采用，但本次输入没有提供这些链上数据。",
+          ? `The latest report is ${latestEarnings.fiscalYear} ${latestEarnings.period}: revenue ${formatCompactUsd(latestEarnings.revenue)}, net income ${formatCompactUsd(latestEarnings.netIncome)}, and diluted EPS ${typeof latestEarnings.epsDiluted === "number" ? `$${latestEarnings.epsDiluted.toFixed(2)}` : "—"}.`
+          : "Not applicable. Crypto assets do not publish corporate earnings; network activity, fees, supply changes, and ecosystem adoption are more relevant, but those onchain inputs were not provided.",
       metrics: snapshot.displayMetrics,
     },
     risks: [
-      "新闻内容未经过完整模型分析，信号方向保持中性。",
-      "行情快照可能在市场快速波动时滞后。",
-      "单条新闻不足以替代仓位、流动性与止损评估。",
+      "The article did not receive a complete model analysis, so the signal remains neutral.",
+      "Market snapshots may lag during fast-moving conditions.",
+      "A single article cannot replace position, liquidity, and stop-loss assessment.",
     ],
     dataAsOf: snapshot.market.asOf,
   };
@@ -640,48 +662,69 @@ async function analyzeBatch(
   config,
   attempt = 0,
 ) {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  const instructions = [
+    "You are a cautious, data-constrained financial researcher writing in English.",
+    "Use only the supplied article, macro snapshot, market data, company profile, earnings, and valuation data. Never invent live data, onchain metrics, policies, or events.",
+    "The signal evaluation measures the article's marginal impact on the asset; it is not an unconditional trading recommendation.",
+    "Return neutral when evidence is mixed or the article conflicts with market data. Analyze macro, industry, market action, earnings, and risks separately.",
+    "Crypto assets do not publish corporate earnings. recentEarnings must say not applicable and identify the alternative fundamentals that should be tracked.",
+    "All output must be in English. Return valid JSON without Markdown.",
+  ].join("\n");
+  const inputText = JSON.stringify({
+    task:
+      'For every article, return {"analyses":[{"id":"original id","signal":{"direction":"long|short|neutral","degree":"strong|moderate|weak","confidence":"integer from 45 to 95","description":"signal rationale"},"macro":"current macro analysis","industry":{"summary":"industry analysis"},"fundamentals":{"overview":"fundamental assessment","recentMarket":"recent market analysis grounded in the supplied numbers","recentEarnings":"recent earnings analysis or an explicit not-applicable explanation for crypto"},"risks":["risk 1","risk 2","risk 3"]}]}. Keep every section concise, specific, evidence-based, and in English.',
+    macroSnapshot,
+    assetSnapshot: snapshot,
+    articles: articles.map((article) => ({
+      id: article.id,
+      publishedDate: article.publishedDate,
+      title: article.title,
+      summary: article.text,
+      publisher: article.publisher,
+    })),
+  });
+  const maxOutputTokens = Math.min(
+    8_192,
+    Math.max(2_200, articles.length * 1_250),
+  );
+  const endpoint =
+    config.apiStyle === "responses"
+      ? responsesUrl(config.baseUrl)
+      : `${config.baseUrl}/chat/completions`;
+  const body =
+    config.apiStyle === "responses"
+      ? {
+          model: config.model,
+          instructions,
+          input: [
+            {
+              role: "user",
+              content: [{ type: "input_text", text: inputText }],
+            },
+          ],
+          max_output_tokens: maxOutputTokens,
+          reasoning: { effort: config.reasoningEffort },
+          text: { format: { type: "text" }, verbosity: "medium" },
+          store: false,
+        }
+      : {
+          model: config.model,
+          messages: [
+            { role: "system", content: instructions },
+            { role: "user", content: inputText },
+          ],
+          thinking: { type: "enabled" },
+          response_format: { type: "json_object" },
+          temperature: 0.15,
+          max_tokens: maxOutputTokens,
+        };
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "你是审慎、数据约束严格的中文金融研究员。",
-            "只能使用用户提供的新闻、宏观快照、行情、公司资料、财报和估值数据；不得编造实时数据、链上数据、政策或事件。",
-            "新闻信号评价衡量该新闻对当前标的的边际影响，不等于无条件交易建议。",
-            "如果证据混合或新闻与行情方向冲突，应给出 neutral。宏观、行业、行情、财报和风险必须分别分析。",
-            "加密资产没有公司财报，recentEarnings 必须明确写不适用，并说明应跟踪的可替代基本面。",
-            "返回合法 JSON，不要输出 Markdown。",
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            task:
-              '为每条新闻返回 {"analyses":[{"id":"原 id","signal":{"direction":"long|short|neutral","degree":"strong|moderate|weak","confidence":45到95整数,"description":"信号解释"},"macro":"当前宏观分析","industry":{"summary":"行业分析"},"fundamentals":{"overview":"基本面判断","recentMarket":"结合输入数字的最近行情分析","recentEarnings":"最近财报分析或加密资产不适用说明"},"risks":["风险1","风险2","风险3"]}]}。每段简洁、具体、有数据依据。',
-            macroSnapshot,
-            assetSnapshot: snapshot,
-            articles: articles.map((article) => ({
-              id: article.id,
-              publishedDate: article.publishedDate,
-              title: article.titleZh || article.title,
-              summary: article.textZh || article.text,
-              publisher: article.publisher,
-            })),
-          }),
-        },
-      ],
-      thinking: { type: "enabled" },
-      response_format: { type: "json_object" },
-      temperature: 0.15,
-      max_tokens: Math.min(8_192, Math.max(2_200, articles.length * 1_250)),
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(180_000),
   });
   const payload = await response.json().catch(() => null);
@@ -711,16 +754,19 @@ async function analyzeBatch(
             articles[0],
             snapshot,
             macroSnapshot,
-            "该新闻未通过自动研究模型的内容安全检查",
+            "The article was blocked by the automated research model's content-safety filter",
           ),
         ],
       ]);
     }
     throw new Error(
-      `GLM analysis failed (${response.status}): ${JSON.stringify(payload).slice(0, 300)}`,
+      `${config.provider} analysis failed (${response.status}): ${JSON.stringify(payload).slice(0, 300)}`,
     );
   }
-  const content = payload?.choices?.[0]?.message?.content;
+  const content =
+    config.apiStyle === "responses"
+      ? extractResponsesText(payload)
+      : payload?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content.trim()) {
     if (articles.length > 1) {
       const byId = new Map();
@@ -743,13 +789,45 @@ async function analyzeBatch(
           articles[0],
           snapshot,
           macroSnapshot,
-          "自动研究模型没有返回可用内容",
+          "The automated research model returned no usable content",
         ),
       ],
     ]);
   }
 
-  const parsed = extractJsonObject(content);
+  let parsed;
+  try {
+    parsed = extractJsonObject(content);
+  } catch {
+    if (articles.length > 1) {
+      const byId = new Map();
+      for (const group of chunks(articles, Math.ceil(articles.length / 2))) {
+        const analyzed = await analyzeBatch(
+          group,
+          snapshot,
+          macroSnapshot,
+          config,
+          attempt + 1,
+        );
+        for (const [id, analysis] of analyzed) byId.set(id, analysis);
+      }
+      return byId;
+    }
+    if (attempt < 2) {
+      return analyzeBatch(articles, snapshot, macroSnapshot, config, attempt + 1);
+    }
+    return new Map([
+      [
+        articles[0].id,
+        unavailableAnalysis(
+          articles[0],
+          snapshot,
+          macroSnapshot,
+          "The automated research model returned malformed structured output",
+        ),
+      ],
+    ]);
+  }
   const rawAnalyses = Array.isArray(parsed?.analyses) ? parsed.analyses : [];
   const byId = new Map(
     rawAnalyses
@@ -800,6 +878,8 @@ async function enrichNews() {
   if (
     ifMissing &&
     !refresh &&
+    newsCache.language === "en" &&
+    newsCache.analysis?.language === "en" &&
     newsCache.articles.every((article) => article.analysis)
   ) {
     console.log(
@@ -809,22 +889,40 @@ async function enrichNews() {
   }
 
   const fmpApiKey = cleanText(process.env.FMP_API_KEY, 500);
-  const llmApiKey = cleanText(
+  const glmApiKey = cleanText(
     process.env.LLM_API_KEY || process.env.ZHIPU_API_KEY,
     1_000,
   );
+  const openAiApiKey = cleanText(process.env.OPENAI_API_KEY, 1_000);
   if (!fmpApiKey) throw new Error("FMP_API_KEY is required to enrich news");
-  if (!llmApiKey) {
-    throw new Error("LLM_API_KEY or ZHIPU_API_KEY is required to analyze news");
+  if (!glmApiKey && !openAiApiKey) {
+    throw new Error(
+      "LLM_API_KEY, ZHIPU_API_KEY, or OPENAI_API_KEY is required to analyze news",
+    );
   }
 
-  const llmConfig = {
-    apiKey: llmApiKey,
-    baseUrl:
-      cleanText(process.env.LLM_BASE_URL, 1_000).replace(/\/+$/, "") ||
-      DEFAULT_LLM_BASE_URL,
-    model: cleanText(process.env.LLM_MODEL, 200) || DEFAULT_LLM_MODEL,
-  };
+  const llmConfig = glmApiKey
+    ? {
+        apiKey: glmApiKey,
+        baseUrl:
+          cleanText(process.env.LLM_BASE_URL, 1_000).replace(/\/+$/, "") ||
+          DEFAULT_LLM_BASE_URL,
+        model: cleanText(process.env.LLM_MODEL, 200) || DEFAULT_LLM_MODEL,
+        provider: "bigmodel",
+        apiStyle: "chat-completions",
+        reasoningEffort: "low",
+      }
+    : {
+        apiKey: openAiApiKey,
+        baseUrl:
+          cleanText(process.env.OPENAI_BASE_URL, 1_000).replace(/\/+$/, "") ||
+          DEFAULT_OPENAI_BASE_URL,
+        model: cleanText(process.env.OPENAI_MODEL, 200) || DEFAULT_OPENAI_MODEL,
+        provider: "openai-compatible",
+        apiStyle: "responses",
+        reasoningEffort:
+          cleanText(process.env.OPENAI_REASONING_EFFORT, 40) || "low",
+      };
   const now = new Date();
   const categoriesBySymbol = new Map(
     newsCache.articles.map((article) => [article.symbol, article.category]),
@@ -936,12 +1034,17 @@ async function enrichNews() {
   });
   await writeJsonAtomically(NEWS_CACHE_PATH, {
     ...newsCache,
-    version: 2,
+    version: 3,
+    language: "en",
     enrichedAt: now.toISOString(),
     analysis: {
-      provider: "bigmodel",
+      provider: llmConfig.provider,
       model: llmConfig.model,
-      thinking: "enabled",
+      reasoning:
+        llmConfig.apiStyle === "responses"
+          ? llmConfig.reasoningEffort
+          : "thinking-enabled",
+      language: "en",
     },
     macroSnapshot,
     assetSnapshots,

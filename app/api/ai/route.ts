@@ -154,7 +154,7 @@ function sanitizeResearch(value: unknown): SignalResearch | undefined {
     signal: {
       direction,
       degree,
-      label: clampText(signal.label, "中性观察", 80),
+      label: clampText(signal.label, "Neutral", 80),
       confidence:
         typeof signal.confidence === "number" &&
         Number.isFinite(signal.confidence)
@@ -164,7 +164,7 @@ function sanitizeResearch(value: unknown): SignalResearch | undefined {
     },
     macro: clampText(research.macro),
     industry: {
-      name: clampText(industry.name, "行业", 120),
+      name: clampText(industry.name, "Industry", 120),
       summary: clampText(industry.summary),
     },
     fundamentals: {
@@ -277,7 +277,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          "AI 还没有配置 OPENAI_API_KEY。请先在本地或 Sites runtime env 添加 OpenAI API key。",
+          "Signal AI is not configured. Add OPENAI_API_KEY locally or to the hosted runtime environment.",
       },
       { status: 503, headers: { "Cache-Control": "no-store" } },
     );
@@ -288,7 +288,7 @@ export async function POST(request: Request) {
     body = (await request.json()) as AiRequestBody;
   } catch {
     return Response.json(
-      { error: "请求格式无效，请重新发送问题。" },
+      { error: "Invalid request. Please send the question again." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -298,14 +298,14 @@ export async function POST(request: Request) {
 
   if (!question) {
     return Response.json(
-      { error: "问题不能为空。" },
+      { error: "The question cannot be empty." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
 
   if (!signal) {
     return Response.json(
-      { error: "当前卡片不在 AlphaSwipe 支持的交易列表里。" },
+      { error: "This signal is not in AlphaSwipe's supported market list." },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -330,7 +330,7 @@ export async function POST(request: Request) {
         model,
         instructions: [
           "You are AlphaSwipe Signal AI, a concise market research copilot for crypto and tokenized/RWA-related perpetual signals.",
-          "Answer in the user's language. If the user writes Chinese, answer in Chinese.",
+          "Always answer in English, even when the user writes in another language.",
           "Use only the supplied signal context plus clearly labeled general market reasoning. Do not invent live prices, order-book depth, account balances, or unprovided facts.",
           "Use the supplied signal evaluation, macro view, industry view, fundamentals, market metrics, earnings analysis and risks. Clearly separate source facts from analysis.",
           "Call out uncertainty and what data would confirm or invalidate the signal.",
@@ -357,7 +357,7 @@ export async function POST(request: Request) {
         {
           error:
             payload.error?.message ||
-            `OpenAI API 调用失败（HTTP ${response.status}）。`,
+            `OpenAI API request failed (HTTP ${response.status}).`,
         },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
@@ -366,7 +366,7 @@ export async function POST(request: Request) {
     const answer = extractAnswer(payload);
     if (!answer) {
       return Response.json(
-        { error: "OpenAI API 没有返回可展示的文字内容。" },
+        { error: "The OpenAI API returned no displayable text." },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -380,8 +380,8 @@ export async function POST(request: Request) {
       {
         error:
           error instanceof Error && error.name === "TimeoutError"
-            ? "OpenAI API 响应超时，请稍后重试。"
-            : "AI 对话暂时不可用，请稍后重试。",
+            ? "The OpenAI API timed out. Please try again."
+            : "Signal AI is temporarily unavailable. Please try again.",
       },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );

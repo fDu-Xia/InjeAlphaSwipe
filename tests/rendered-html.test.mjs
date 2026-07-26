@@ -111,9 +111,9 @@ test("starter preview is removed and product assets are wired", async () => {
   assert.match(injectiveClient, /findMarketCandidates/);
   assert.match(injectiveClient, /findLiquidDerivativeMarket/);
   assert.match(injectiveClient, /normalizeInjectiveOrderError/);
-  assert.match(injectiveClient, /账户未激活或余额不足/);
-  assert.match(injectiveClient, /余额不足/);
-  assert.match(injectiveClient, /已检查/);
+  assert.match(injectiveClient, /Account not activated or insufficient balance/);
+  assert.match(injectiveClient, /Insufficient balance/);
+  assert.match(injectiveClient, /Checked:/);
   assert.match(injectiveClient, /fetchPositionsV2/);
   assert.match(injectiveClient, /derivativeMarginFromChainMarginToFixed/);
   assert.match(injectiveClient, /Network\.Mainnet/);
@@ -160,13 +160,13 @@ test("starter preview is removed and product assets are wired", async () => {
   assert.match(swipeApp, /schemaVersion === 2/);
   assert.match(swipeApp, /signalForQuestion/);
   assert.match(swipeApp, /ChatGPT API research only/);
-  assert.match(swipeApp, /新闻信号评价/);
-  assert.match(swipeApp, /当前宏观分析/);
-  assert.match(swipeApp, /行业分析/);
-  assert.match(swipeApp, /标的基本面/);
-  assert.match(swipeApp, /最近行情/);
-  assert.match(swipeApp, /最近财报/);
-  assert.match(swipeApp, /风险提示/);
+  assert.match(swipeApp, /News signal/);
+  assert.match(swipeApp, /Macro analysis/);
+  assert.match(swipeApp, /Industry analysis/);
+  assert.match(swipeApp, /Asset fundamentals/);
+  assert.match(swipeApp, /Recent market/);
+  assert.match(swipeApp, /Recent earnings/);
+  assert.match(swipeApp, /Risk factors/);
   assert.doesNotMatch(swipeApp, /className="earnings-panel"|className="thesis-grid"|className="fact-row"/);
   assert.doesNotMatch(swipeApp, /className="back-header"/);
   assert.match(swipeApp, /className="back-close"/);
@@ -194,20 +194,25 @@ test("starter preview is removed and product assets are wired", async () => {
   assert.match(syncNews, /STOCK_SYMBOLS\s*=\s*\["META", "NVDA", "AAPL", "TSLA"\]/);
   assert.match(syncNews, /CRYPTO_SYMBOLS\s*=\s*\["BTCUSD", "ETHUSD", "BNBUSD", "INJUSD"\]/);
   assert.match(syncNews, /WEEK_MS\s*=\s*7\s*\*/);
-  assert.match(syncNews, /thinking:\s*\{\s*type:\s*"enabled"\s*\}/);
-  assert.match(syncNews, /glm-4\.5-air/);
-  assert.match(syncNews, /chat\/completions/);
+  assert.doesNotMatch(syncNews, /translate|translation|titleZh|textZh|chat\/completions/i);
   assert.match(enrichNews, /historical-price-eod\/full/);
   assert.match(enrichNews, /income-statement/);
   assert.match(enrichNews, /treasury-rates/);
   assert.match(enrichNews, /economic-calendar/);
   assert.match(enrichNews, /thinking:\s*\{\s*type:\s*"enabled"\s*\}/);
+  assert.match(enrichNews, /All output must be in English/);
   assert.match(packageJson, /"predev":\s*"node scripts\/sync-news\.mjs --if-missing && node scripts\/enrich-news\.mjs --if-missing"/);
   assert.match(packageJson, /"news:refresh":\s*"node scripts\/sync-news\.mjs --refresh && node scripts\/enrich-news\.mjs --refresh"/);
   assert.match(newsCache, /"source":\s*"financialmodelingprep"/);
+  assert.match(newsCache, /"language":\s*"en"/);
   assert.match(newsCache, /"direction":\s*"(?:long|short|neutral)"/);
   assert.match(newsCache, /"macroSnapshot"/);
   assert.match(newsCache, /"assetSnapshots"/);
+  assert.doesNotMatch(newsCache, /"titleZh"|"textZh"|"translation"/);
+  assert.doesNotMatch(
+    [layout, injectiveClient, swipeApp, aiRoute, signalsRoute, syncNews, enrichNews, newsCache].join("\n"),
+    /[\p{Script=Han}]/u,
+  );
   assert.match(globalStyles, /\.signal-verdict/);
   assert.match(globalStyles, /\.research-section/);
   assert.match(globalStyles, /\.research-metrics/);
